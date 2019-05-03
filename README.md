@@ -159,3 +159,6 @@ public class Main {
 
 }
 ```
+# How to run
+visit http://localhost:8080/sayHello?name=fjd
+will get Hello, fjd (from Spring Boot)

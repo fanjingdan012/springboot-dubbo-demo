@@ -1,0 +1,62 @@
+@startuml
+
+
+springDispatcherServlet->DemoConsumerController:sayHello
+DemoConsumerController->DemoService的动态代理:sayHello
+DemoService的动态代理->InvokerInvocationHandler:invoke(Object proxy, Method method, Object[] args)
+note right of InvokerInvocationHandler #aqua
+如果provider（这里是DemoService）是Object，就直接调用了，
+如果是toString和hashCode方法就直接把invoker toString和hash一下返回了
+否则才是真正调用DemoService的sayHello方法
+end note
+InvokerInvocationHandler->MockClusterInvoker:invoke(Invocation invocation)
+MockClusterInvoker->AbstractClusterInvoker:invoke(Invocation invocation)
+activate AbstractClusterInvoker #DarkSalmon
+note right of AbstractClusterInvoker #aqua
+
+获取invokers List
+获取LoadBalance
+
+end note
+    AbstractClusterInvoker->FailoverClusterInvoker:doInvoke(Invocation invocation, List<Invoker<T>> invokers, LoadBalance loadbalance)
+    note right of FailoverClusterInvoker #aqua
+    invocation里面有方法名，方法参数列表，参数值等
+    invoker里有详细的provider和consumer的url dubbo协议的
+    loadBalance里是loadBalance策略，默认random
+    先检查invoker不为空
+    然后获取retry次数，默认2次，也就是call3次，设置<0，就call1次
+    然后根据call次数创建一个List<Invoker>来保存invoked，这里就是3个
+    循环3次：
+        从cluster里select出invoker放进invoked List
+    end note
+    FailoverClusterInvoker->AbstractClusterInvoker:select()
+    activate AbstractClusterInvoker #DarkSalmon
+
+    note right of AbstractClusterInvoker #aqua
+    看一下sticky参数要不要解析，就是盯死这个人提供服务
+    end note
+    AbstractClusterInvoker->AbstractClusterInvoker:doselect()返回invoker
+    activate AbstractClusterInvoker #DarkSalmon
+        note right of AbstractClusterInvoker #aqua
+        根据策略选择
+        end note
+        AbstractClusterInvoker->FailoverClusterInvoker:Invoker<T> invoker
+    deactivate AbstractClusterInvoker
+    deactivate AbstractClusterInvoker
+    note right of FailoverClusterInvoker #aqua
+    继续上面的循环：
+        把这个invoked List存入RpcContext
+        invoke之，拿到结果返回（成功的话就跳出循环了）
+    end note
+    FailoverClusterInvoker->InvokerWrapper:invoke(invocation)
+    note right of InvokerWrapper #aqua
+    buildInvokerChain
+    filter protocol,consumerContext,future, monitor,
+    end note
+    InvokerWrapper->AbstractInvoker:invoke(invocation)
+    note right of AbstractInvoker #aqua
+        建立FutureTask async的去调用
+        end note
+    AbstractInvoker->NettyClient
+deactivate AbstractClusterInvoker
+@enduml

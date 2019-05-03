@@ -1,0 +1,77 @@
+@startuml
+
+autonumber
+
+AbstractAutowireCapableBeanFactory->AnnotationBean:postProcessAfterInitialization()
+note right of AnnotationBean #aqua
+    找到dubbo的@Service的Bean
+    创建对应的ServiceBean serviceConfig，
+    设置serviceConfig的register,provider,monitor,application,module,
+end note
+AnnotationBean->ServiceConfig:export()
+note right of ServiceConfig #aqua
+    维护了一个ArrayList<URL> urls
+    维护了一个ArrayList<Exporter<?>> exporters
+    export:
+    检查export是否已经完成，
+    如果没有，那就doExport
+    如果有delay，那就开一个线程sleep后doExport
+end note
+ServiceConfig->ServiceConfig:doExport()
+
+ServiceConfig->ServiceConfig:doExportUrls()
+ServiceConfig->ServiceConfig:doExportUrlsFor1Protocol()
+ServiceConfig->ProtocolAdpative动态代理:export()
+ProtocolAdpative动态代理->ProtocolListenerWrapper:export()
+note right of ProtocolListenerWrapper #aqua
+    如果protocol是"registry",直接返回this.protocol.export(invoker)，否则返回new ListenerExporterWrapper
+    其他protocol有injvm
+end note
+ProtocolListenerWrapper->ProtocolFilterWrapper:export()
+note right of ProtocolFilterWrapper #aqua
+    如果protocol是"registry",直接返回this.protocol.export(invoker)，否则返回this.protocol.export(buildInvokerChain(invoker, "service.filter", "provider")
+end note
+ProtocolFilterWrapper->RegistryProtocol:export(Invoker<T> originInvoker)
+
+activate RegistryProtocol #DarkSalmon
+    RegistryProtocol->RegistryProtocol:getRegistry(Invoker<T> originInvoker)
+    RegistryProtocol->RegistryFactoryAdpative动态代理:getRegistry()
+    RegistryFactoryAdpative动态代理-> AbstractRegistryFactory:getRegistry()
+    AbstractRegistryFactory->MulticastRegistryFactory:createRegistry()
+    MulticastRegistryFactory->MulticastRegistry:MulticastRegistry(URL url)
+    note right of MulticastRegistry #aqua
+        起一个线程接受注册消息
+        url:multicast://224.5.6.7:1234/com.alibaba.dubbo.registry.RegistryService?
+        application=demo-provider&dubbo=2.5.3&
+        interface=com.alibaba.dubbo.registry.RegistryService&
+        pid=20296&
+        timestamp=1556098177000
+        每过60秒就检查clean参数，然后用ScheduledFuture<?> cleanFuture清理
+        清理就是轮询注册中心，检查每个url是不是过期了
+        注册中心是一个ConcurrentHashMap<URL, Set<URL>>
+        Registry里面支持register/unregister subscribe/unsubscribe lookup
+    end note
+    MulticastRegistry->RegistryProtocol:Registry
+    RegistryProtocol->MulticastRegistry:register(URL url)
+    note right of MulticastRegistry #aqua
+        url:dubbo://10.58.69.81:20880/com.imooc.springboot.dubbo.demo.DemoService?
+        anyhost=true&
+        application=demo-provider&
+        dubbo=2.5.3&
+        interface=com.imooc.springboot.dubbo.demo.DemoService&
+        methods=sayHello&
+        pid=20296&
+        side=provider&
+        timestamp=1556098177023
+        再转成subscribeUrl
+        provider://10.58.69.81:20880/com.imooc.springboot.dubbo.demo.DemoService?anyhost=true&application=demo-provider&category=configurators&check=false&dubbo=2.5.3&interface=com.imooc.springboot.dubbo.demo.DemoService&methods=sayHello&pid=20296&side=provider&timestamp=1556098177023
+        维护了一个ConcurrentHashMap<URL, NotifyListener> overrideListeners列表，把subscribeUrl放进去
+        返回一个Exporter，里面定义了怎么unexport和获取invoker
+    end note
+    RegistryProtocol->MulticastRegistry:subscribe(overrideSubscribeUrl, overrideSubscribeListener)
+    RegistryProtocol->ServiceConfig:Exporter<T>
+deactivate RegistryProtocol
+
+
+
+@enduml

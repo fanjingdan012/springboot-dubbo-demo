@@ -1,0 +1,23 @@
+@startuml
+->ChannelEventRunnable:run()
+ChannelEventRunnable->DecodeHandler:received()
+DecodeHandler->HeaderExchangeHandler:received()
+HeaderExchangeHandler->HeaderExchangeHandler:handleRequest()
+HeaderExchangeHandler->DubboProtocol动态代理:reply()
+DubboProtocol动态代理->ProtocolFilterWrapper动态代理:invoke()
+note right of ProtocolFilterWrapper动态代理 #aqua
+filter链:
+EchoFilter
+ClassLoaderFilter
+GenericFilter
+ContextFilter
+TraceFilter
+TimeoutFilter
+MonitorFilter
+ExceptionFilter
+end note
+ProtocolFilterWrapper动态代理->InvokerWrapper:invoke()
+InvokerWrapper->AbstractProxyInvoker:invoke()
+AbstractProxyInvoker->JavassistProxyFactory动态代理:doInvoke()
+JavassistProxyFactory动态代理->DemoServiceImpl:sayHello()
+@enduml
